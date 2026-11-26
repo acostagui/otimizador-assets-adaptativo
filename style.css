@@ -1,5 +1,5 @@
 :root {
-  --bg: #fafafa;
+  --bg: #f6f7f9;
   --surface: #ffffff;
   --text: #111827;
   --muted: #6b7280;
@@ -8,6 +8,9 @@
   --green-soft: #f0fdf4;
   --amber: #b45309;
   --red: #b91c1c;
+  --radius-lg: 12px;
+  --radius-md: 8px;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
 }
 
 * {
@@ -130,20 +133,20 @@ code {
   display: inline-flex;
   background: #f3f4f6;
   padding: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
 
 .seg-btn {
   border: none;
   background: transparent;
-  padding: 0.35rem 0.75rem;
+  padding: 0.38rem 0.78rem;
   font-size: 0.78rem;
   font-weight: 500;
   color: var(--muted);
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: color 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease;
 }
 
 .seg-btn:hover {
@@ -154,7 +157,14 @@ code {
   background: var(--surface);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 
 /* Top Dashboard */
@@ -175,8 +185,9 @@ code {
 .results-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1.15rem;
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-card);
 }
 
 .speedtest-card {
@@ -436,9 +447,10 @@ code {
 .section-box {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1.15rem;
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
   margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-card);
 }
 
 .toolbar {
@@ -513,8 +525,9 @@ code {
 
 .compare-item {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
   overflow: hidden;
+  background: var(--surface);
 }
 
 .compare-head {
@@ -573,18 +586,21 @@ code {
 
 .asset-card {
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s ease;
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .asset-card:hover {
-  border-color: #9ca3af;
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
 .asset-card.active-card {
   border-color: var(--text);
+  box-shadow: 0 0 0 1px var(--text);
 }
 
 .img-wrapper {
@@ -600,6 +616,18 @@ code {
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.25s ease;
+}
+
+.asset-card:hover .img-wrapper img {
+  transform: scale(1.02);
+}
+
+.app-footer {
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--muted);
+  padding: 0.5rem 1.25rem 1.25rem;
 }
 
 .badge {

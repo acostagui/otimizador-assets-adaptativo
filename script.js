@@ -1,5 +1,5 @@
 /**
- * 7. Otimizador de Assets Adaptativo
+ * Otimizador de Assets Adaptativo
  * Uso da Network Information API (navigator.connection) + Speed Test em tempo real
  * para tomada de decisão dinâmica no carregamento de imagens (4G, 3G, 2G).
  */
@@ -10,12 +10,15 @@ const connection =
   navigator.webkitConnection ||
   null;
 
+const TOTAL_BASE_BYTES = 1065512;
+const dom = {};
+
 /**
  * Retorna dinamicamente o caminho do asset conforme a qualidade da rede (2G / 3G / 4G)
  */
 function getAdaptiveAssetPath(baseName, overrideTier) {
-  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-  const effectiveType = overrideTier || (conn ? conn.effectiveType : '4g');
+  const effectiveType = overrideTier || (connection ? connection.effectiveType : '4g');
+  if (!overrideTier && connection?.saveData) return `assets/${baseName}-2g.jpg`;
 
   if (effectiveType === '2g' || effectiveType === 'slow-2g') {
     return `assets/${baseName}-2g.jpg`;
@@ -57,7 +60,8 @@ function formatKB(bytes) {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-function classifyMbpsToTier(mbps, apiType) {
+function classifyMbpsToTier(mbps, apiType, respectSaveData = false) {
+  if (respectSaveData && connection?.saveData) return '2g';
   if (apiType === 'slow-2g' || apiType === '2g' || mbps < 0.6) return '2g';
   if (apiType === '3g' || mbps < 2.5) return '3g';
   return '4g';
@@ -67,9 +71,9 @@ function classifyMbpsToTier(mbps, apiType) {
  * Desenha o velocímetro SVG de acordo com o valor de Mbps
  */
 function setGaugeValue(mbps, tier, statusText) {
-  const arc = document.getElementById('gaugeArc');
-  const valEl = document.getElementById('valSpeed');
-  const statusEl = document.getElementById('speedTestStatus');
+  const arc = dom.gaugeArc || document.getElementById('gaugeArc');
+  const valEl = dom.valSpeed || document.getElementById('valSpeed');
+  const statusEl = dom.speedTestStatus || document.getElementById('speedTestStatus');
 
   valEl.textContent = Number(mbps).toFixed(1);
   if (statusText) statusEl.textContent = statusText;
@@ -91,7 +95,7 @@ function setGaugeValue(mbps, tier, statusText) {
   arc.style.stroke = TIERS[tier].color;
 
   ['2g', '3g', '4g'].forEach((t) => {
-    const pill = document.getElementById(`zone-${t}`);
+    const pill = dom[`zone_${t}`] || document.getElementById(`zone-${t}`);
     pill.className = `zone-pill ${t === tier ? `active-${t}` : ''}`;
   });
 }
@@ -278,7 +282,7 @@ function getNetworkDecision() {
     if (state.mode === '3g') { downlink = 1.4;  ping = 210; }
     if (state.mode === '2g') { downlink = 0.25; ping = 780; }
   } else {
-    tier = classifyMbpsToTier(downlink, apiEffectiveType);
+    tier = classifyMbpsToTier(downlink, apiEffectiveType, true);
   }
 
   return {
@@ -292,7 +296,7 @@ function getNetworkDecision() {
 
 function updateDashboardUI() {
   const net = getNetworkDecision();
-  const totalBase = ASSETS.reduce((acc, a) => acc + a.sizes['4g'], 0);
+  const totalBase = TOTAL_BASE_BYTES;
   const totalCurrent = ASSETS.reduce((acc, a) => acc + a.sizes[a.currentTier], 0);
   const savedBytes = Math.max(0, totalBase - totalCurrent);
   const savedPct = Math.round((savedBytes / totalBase) * 100);
@@ -304,27 +308,26 @@ function updateDashboardUI() {
     state.mode === 'auto' ? 'Rede Real' : `Simulando ${net.tier.toUpperCase()}`
   );
 
-  document.getElementById('valApiType').textContent =
+  dom.valApiType.textContent =
     state.mode === 'auto'
-      ? `effectiveType: ${net.apiEffectiveType}`
+      ? `effectiveType: ${net.apiEffectiveType}${connection?.saveData ? ' · Save-Data' : ''}`
       : `Forçado: ${net.tier}`;
-  document.getElementById('valPing').textContent = `${net.ping} ms`;
+  dom.valPing.textContent = `${net.ping} ms`;
 
-  document.getElementById('valDecision').textContent = net.info.label;
-  document.getElementById('valResolution').textContent = net.info.res;
+  dom.valDecision.textContent = net.info.label;
+  dom.valResolution.textContent = net.info.res;
 
-  document.getElementById('valConsumption').textContent = formatKB(totalCurrent);
-  document.getElementById('valBaseRef').textContent = `Sem otimizador (4G): ${formatKB(totalBase)}`;
+  dom.valConsumption.textContent = formatKB(totalCurrent);
+  dom.valBaseRef.textContent = `Sem otimizador (4G): ${formatKB(totalBase)}`;
 
-  document.getElementById('valSavings').textContent = savedPct > 0 ? `-${savedPct}%` : '0%';
-  document.getElementById('valSavedKB').textContent =
+  dom.valSavings.textContent = savedPct > 0 ? `-${savedPct}%` : '0%';
+  dom.valSavedKB.textContent =
     savedBytes > 0 ? `${formatKB(savedBytes)} economizados` : 'Qualidade máxima ativa';
 
-  document.getElementById('valBarRatio').textContent =
+  dom.valBarRatio.textContent =
     `${100 - savedPct}% (${formatKB(totalCurrent)} de ${formatKB(totalBase)})`;
-  const barFill = document.getElementById('compBarFill');
-  barFill.style.width = `${usedPct}%`;
-  barFill.style.backgroundColor = TIERS[net.tier].color;
+  dom.compBarFill.style.width = `${usedPct}%`;
+  dom.compBarFill.style.backgroundColor = TIERS[net.tier].color;
 }
 
 function applyCardTier(asset, tier) {
@@ -336,7 +339,10 @@ function applyCardTier(asset, tier) {
   const meta = document.getElementById(`meta-${asset.id}`);
   const btn = document.querySelector(`.btn-upgrade-hd[data-id="${asset.id}"]`);
 
-  img.src = getAdaptiveAssetPath(`foto-${asset.id}`, tier);
+  if (img.dataset.loadedTier !== tier) {
+    img.src = getAdaptiveAssetPath(`foto-${asset.id}`, tier);
+    img.dataset.loadedTier = tier;
+  }
   badge.textContent = info.badge;
   badge.className = `badge ${info.cls}`;
 
@@ -379,7 +385,7 @@ function renderComparator() {
             <span>${sizeText}</span>
           </div>
           <div class="compare-img ${state.zoom ? 'zoomed' : ''}">
-            <img src="${src}" alt="${info.label}" />
+            <img src="${src}" alt="${info.label}" decoding="async" />
           </div>
         </div>
       `;
@@ -409,6 +415,9 @@ function handleUpload(file) {
           c.toBlob((b) => resolve({ url: URL.createObjectURL(b), bytes: b.size }), 'image/jpeg', q);
         });
 
+      if (state.customUpload) {
+        Object.values(state.customUpload).forEach((item) => URL.revokeObjectURL(item.url));
+      }
       state.customUpload = {
         '4g': await encode(1920, 1200, 0.9),
         '3g': await encode(640, 400, 0.55),
@@ -434,7 +443,31 @@ function handleUpload(file) {
   reader.readAsDataURL(file);
 }
 
+function cacheDomRefs() {
+  [
+    'gaugeArc',
+    'valSpeed',
+    'speedTestStatus',
+    'valApiType',
+    'valPing',
+    'valDecision',
+    'valResolution',
+    'valConsumption',
+    'valBaseRef',
+    'valSavings',
+    'valSavedKB',
+    'valBarRatio',
+    'compBarFill'
+  ].forEach((id) => {
+    dom[id] = document.getElementById(id);
+  });
+  ['2g', '3g', '4g'].forEach((t) => {
+    dom[`zone_${t}`] = document.getElementById(`zone-${t}`);
+  });
+}
+
 function init() {
+  cacheDomRefs();
   applyNetworkToAll();
   measureRealInternetSpeed();
 

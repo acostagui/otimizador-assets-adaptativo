@@ -6,9 +6,9 @@ Implementação de carregamento dinâmico de imagens utilizando a `Network Infor
 
 O sistema verifica a qualidade da conexão (`effectiveType`, `downlink` e `saveData`) e seleciona a resolução adequada antes de buscar as imagens:
 
-- **4G:** 1200×800 (qualidade 85%)
-- **3G:** 600×400 (qualidade 60%)
-- **2G / Slow-2G / Save-Data:** 240×160 (qualidade 30%)
+- **4G:** 1920×1200 (alta resolução)
+- **3G:** 640×400 (resolução média)
+- **2G / Slow-2G / Save-Data:** 160×100 (baixa resolução)
 
 ## Arquivos
 

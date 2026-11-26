@@ -9,7 +9,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Otimizador" />
-  <title>7. Otimizador de Assets Adaptativo</title>
+  <title>Otimizador de Assets Adaptativo</title>
+  <link rel="preconnect" href="https://speed.cloudflare.com" crossorigin />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
@@ -22,7 +23,7 @@
       <div class="brand-wrap">
         <img src="assets/icon.svg" alt="" class="brand-icon" width="36" height="36" aria-hidden="true" />
         <div>
-          <h1>7. Otimizador de Assets Adaptativo</h1>
+          <h1>Otimizador de Assets Adaptativo</h1>
           <p class="subtitle">Detecção de velocidade (2G / 3G / 4G) e decisão dinâmica via <code>Network Information API</code></p>
         </div>
       </div>
@@ -197,6 +198,10 @@
             <img
               id="img-1"
               alt="Paisagem Natural"
+              width="640"
+              height="400"
+              loading="lazy"
+              decoding="async"
               data-src-4g="assets/foto-1-4g.jpg"
               data-src-3g="assets/foto-1-3g.jpg"
               data-src-2g="assets/foto-1-2g.jpg"
@@ -217,6 +222,10 @@
             <img
               id="img-2"
               alt="Horizonte Urbano"
+              width="640"
+              height="400"
+              loading="lazy"
+              decoding="async"
               data-src-4g="assets/foto-2-4g.jpg"
               data-src-3g="assets/foto-2-3g.jpg"
               data-src-2g="assets/foto-2-2g.jpg"
@@ -237,6 +246,10 @@
             <img
               id="img-3"
               alt="Reserva Ambiental"
+              width="640"
+              height="400"
+              loading="lazy"
+              decoding="async"
               data-src-4g="assets/foto-3-4g.jpg"
               data-src-3g="assets/foto-3-3g.jpg"
               data-src-2g="assets/foto-3-2g.jpg"
@@ -257,6 +270,10 @@
             <img
               id="img-4"
               alt="Relevo Costeiro"
+              width="640"
+              height="400"
+              loading="lazy"
+              decoding="async"
               data-src-4g="assets/foto-4-4g.jpg"
               data-src-3g="assets/foto-4-3g.jpg"
               data-src-2g="assets/foto-4-2g.jpg"
@@ -277,6 +294,10 @@
             <img
               id="img-5"
               alt="Vale das Montanhas"
+              width="640"
+              height="400"
+              loading="lazy"
+              decoding="async"
               data-src-4g="assets/foto-5-4g.jpg"
               data-src-3g="assets/foto-5-3g.jpg"
               data-src-2g="assets/foto-5-2g.jpg"
@@ -297,6 +318,10 @@
             <img
               id="img-6"
               alt="Ecossistema Fluvial"
+              width="640"
+              height="400"
+              loading="lazy"
+              decoding="async"
               data-src-4g="assets/foto-6-4g.jpg"
               data-src-3g="assets/foto-6-3g.jpg"
               data-src-2g="assets/foto-6-2g.jpg"
@@ -314,6 +339,10 @@
       </div>
     </section>
   </main>
+
+  <footer class="app-footer container">
+    <span>Otimizador de Assets Adaptativo · Network Information API · PWA</span>
+  </footer>
 
   <!-- Barra de navegação inferior (modo App no celular) -->
   <nav class="app-bottom-nav" id="appBottomNav" aria-label="Navegação principal">
