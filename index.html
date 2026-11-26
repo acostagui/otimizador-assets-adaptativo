@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="description" content="Detecção de velocidade (2G / 3G / 4G) e carregamento adaptativo de imagens via Network Information API." />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Otimizador" />
+  <title>7. Otimizador de Assets Adaptativo</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <div class="brand-wrap">
+        <img src="assets/icon.svg" alt="" class="brand-icon" width="36" height="36" aria-hidden="true" />
+        <div>
+          <h1>7. Otimizador de Assets Adaptativo</h1>
+          <p class="subtitle">Detecção de velocidade (2G / 3G / 4G) e decisão dinâmica via <code>Network Information API</code></p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="segmented" id="modeButtons">
+          <button class="seg-btn active" data-mode="auto">Auto (API Real)</button>
+          <button class="seg-btn" data-mode="4g">Simular 4G</button>
+          <button class="seg-btn" data-mode="3g">Simular 3G</button>
+          <button class="seg-btn" data-mode="2g">Simular 2G</button>
+        </div>
+        <button class="btn-install-app" id="btnInstallApp" type="button" hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M5 21h14" />
+          </svg>
+          <span>Instalar App</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Painel Superior: Speed Test (Detecção) + Economia Comprovada (Resultados) -->
+    <section class="top-dashboard" id="sec-monitor">
+      <!-- Card Esquerdo: Speed Test + Network Information API -->
+      <div class="speedtest-card">
+        <div class="speedtest-gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 200 115">
+            <path
+              class="gauge-bg"
+              d="M 20 100 A 80 80 0 0 1 180 100"
+              fill="none"
+              stroke-width="14"
+              stroke-linecap="round"
+            />
+            <path
+              id="gaugeArc"
+              class="gauge-fill"
+              d="M 20 100 A 80 80 0 0 1 180 100"
+              fill="none"
+              stroke-width="14"
+              stroke-linecap="round"
+              stroke-dasharray="251.2"
+              stroke-dashoffset="251.2"
+            />
+          </svg>
+          <div class="gauge-center">
+            <span class="gauge-status" id="speedTestStatus">Rede Detectada</span>
+            <strong class="gauge-num" id="valSpeed">0.0</strong>
+            <span class="gauge-unit">Mbps</span>
+          </div>
+        </div>
+
+        <div class="speedtest-info">
+          <div class="speedtest-zones">
+            <span class="zone-pill" id="zone-2g">2G · Baixa (&lt; 0.6 Mbps)</span>
+            <span class="zone-pill" id="zone-3g">3G · Média (0.6–2.5 Mbps)</span>
+            <span class="zone-pill" id="zone-4g">4G · Alta (&gt; 2.5 Mbps)</span>
+          </div>
+
+          <div class="speedtest-meta-row">
+            <div>
+              <span>navigator.connection</span>
+              <strong id="valApiType">effectiveType: 4g</strong>
+            </div>
+            <div>
+              <span>Latência (RTT)</span>
+              <strong id="valPing">-- ms</strong>
+            </div>
+          </div>
+
+          <div class="speedtest-actions">
+            <button class="btn-speedtest" id="btnMeasureNow">
+              Medir Velocidade Real
+            </button>
+            <label class="auto-live-label">
+              <input type="checkbox" id="chkLiveLoop" />
+              <span>Atualizar a cada 5s</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Direito: Tomada de Decisão + Redução Comprovada -->
+      <div class="results-card">
+        <div class="metrics-row">
+          <div class="stat-item">
+            <span class="stat-label">Decisão Dinâmica</span>
+            <strong class="stat-value" id="valDecision">--</strong>
+            <small class="stat-sub" id="valResolution">--</small>
+          </div>
+
+          <div class="stat-item">
+            <span class="stat-label">Consumo Carregado</span>
+            <strong class="stat-value" id="valConsumption">-- KB</strong>
+            <small class="stat-sub" id="valBaseRef">Sem otimizador (4G): 1040.5 KB</small>
+          </div>
+
+          <div class="stat-item stat-highlight">
+            <span class="stat-label">Redução de Dados</span>
+            <strong class="stat-value text-green" id="valSavings">0%</strong>
+            <small class="stat-sub" id="valSavedKB">Qualidade máxima ativa</small>
+          </div>
+        </div>
+
+        <div class="consumption-comparison">
+          <div class="comp-bar-labels">
+            <span>Proporção de dados transferidos em relação ao 4G</span>
+            <strong id="valBarRatio">100% (1040.5 KB de 1040.5 KB)</strong>
+          </div>
+          <div class="comp-bar-track">
+            <div class="comp-bar-fill" id="compBarFill" style="width: 100%"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparador Visual -->
+    <section class="section-box" id="sec-comparador">
+      <div class="toolbar">
+        <div>
+          <h2>Comparador de Resolução (Alta vs Média vs Baixa)</h2>
+          <p class="muted-note">Compare visualmente as versões e o tamanho em KB de cada arquivo</p>
+        </div>
+
+        <div class="toolbar-actions">
+          <div class="segmented" id="compareModeButtons">
+            <button class="seg-btn active" data-comp="4g-2g">4G vs 2G</button>
+            <button class="seg-btn" data-comp="4g-3g">4G vs 3G</button>
+            <button class="seg-btn" data-comp="3g-2g">3G vs 2G</button>
+            <button class="seg-btn" data-comp="all">4G · 3G · 2G</button>
+          </div>
+
+          <select class="select-input" id="selectCompareAsset">
+            <option value="1">Foto 1 — Paisagem Natural</option>
+            <option value="2">Foto 2 — Horizonte Urbano</option>
+            <option value="3">Foto 3 — Reserva Ambiental</option>
+            <option value="4">Foto 4 — Relevo Costeiro</option>
+            <option value="5">Foto 5 — Vale das Montanhas</option>
+            <option value="6">Foto 6 — Ecossistema Fluvial</option>
+          </select>
+
+          <label class="toggle-btn">
+            <input type="checkbox" id="chkZoomCompare" />
+            <span>Lupa 2.5x</span>
+          </label>
+
+          <label class="upload-btn">
+            <input type="file" id="fileUploadInput" accept="image/*" hidden />
+            Enviar Foto
+          </label>
+        </div>
+      </div>
+
+      <div class="compare-grid cols-2" id="compareGrid"></div>
+    </section>
+
+    <!-- Galeria Adaptativa -->
+    <section class="section-box" id="sec-galeria">
+      <div class="toolbar">
+        <div>
+          <h2>Mídia Carregada na Página</h2>
+          <p class="muted-note">Clique em uma imagem para compará-la acima, ou carregue em 4G individualmente quando estiver em 2G/3G</p>
+        </div>
+      </div>
+
+      <div class="gallery-grid" id="galleryGrid">
+        <article class="asset-card active-card" data-id="1">
+          <div class="img-wrapper">
+            <img
+              id="img-1"
+              alt="Paisagem Natural"
+              data-src-4g="assets/foto-1-4g.jpg"
+              data-src-3g="assets/foto-1-3g.jpg"
+              data-src-2g="assets/foto-1-2g.jpg"
+            />
+            <span class="badge" id="badge-1">--</span>
+          </div>
+          <div class="card-meta">
+            <div>
+              <strong>Paisagem Natural</strong>
+              <span id="meta-1">--</span>
+            </div>
+            <button class="btn-upgrade-hd" data-id="1">Ver 4G</button>
+          </div>
+        </article>
+
+        <article class="asset-card" data-id="2">
+          <div class="img-wrapper">
+            <img
+              id="img-2"
+              alt="Horizonte Urbano"
+              data-src-4g="assets/foto-2-4g.jpg"
+              data-src-3g="assets/foto-2-3g.jpg"
+              data-src-2g="assets/foto-2-2g.jpg"
+            />
+            <span class="badge" id="badge-2">--</span>
+          </div>
+          <div class="card-meta">
+            <div>
+              <strong>Horizonte Urbano</strong>
+              <span id="meta-2">--</span>
+            </div>
+            <button class="btn-upgrade-hd" data-id="2">Ver 4G</button>
+          </div>
+        </article>
+
+        <article class="asset-card" data-id="3">
+          <div class="img-wrapper">
+            <img
+              id="img-3"
+              alt="Reserva Ambiental"
+              data-src-4g="assets/foto-3-4g.jpg"
+              data-src-3g="assets/foto-3-3g.jpg"
+              data-src-2g="assets/foto-3-2g.jpg"
+            />
+            <span class="badge" id="badge-3">--</span>
+          </div>
+          <div class="card-meta">
+            <div>
+              <strong>Reserva Ambiental</strong>
+              <span id="meta-3">--</span>
+            </div>
+            <button class="btn-upgrade-hd" data-id="3">Ver 4G</button>
+          </div>
+        </article>
+
+        <article class="asset-card" data-id="4">
+          <div class="img-wrapper">
+            <img
+              id="img-4"
+              alt="Relevo Costeiro"
+              data-src-4g="assets/foto-4-4g.jpg"
+              data-src-3g="assets/foto-4-3g.jpg"
+              data-src-2g="assets/foto-4-2g.jpg"
+            />
+            <span class="badge" id="badge-4">--</span>
+          </div>
+          <div class="card-meta">
+            <div>
+              <strong>Relevo Costeiro</strong>
+              <span id="meta-4">--</span>
+            </div>
+            <button class="btn-upgrade-hd" data-id="4">Ver 4G</button>
+          </div>
+        </article>
+
+        <article class="asset-card" data-id="5">
+          <div class="img-wrapper">
+            <img
+              id="img-5"
+              alt="Vale das Montanhas"
+              data-src-4g="assets/foto-5-4g.jpg"
+              data-src-3g="assets/foto-5-3g.jpg"
+              data-src-2g="assets/foto-5-2g.jpg"
+            />
+            <span class="badge" id="badge-5">--</span>
+          </div>
+          <div class="card-meta">
+            <div>
+              <strong>Vale das Montanhas</strong>
+              <span id="meta-5">--</span>
+            </div>
+            <button class="btn-upgrade-hd" data-id="5">Ver 4G</button>
+          </div>
+        </article>
+
+        <article class="asset-card" data-id="6">
+          <div class="img-wrapper">
+            <img
+              id="img-6"
+              alt="Ecossistema Fluvial"
+              data-src-4g="assets/foto-6-4g.jpg"
+              data-src-3g="assets/foto-6-3g.jpg"
+              data-src-2g="assets/foto-6-2g.jpg"
+            />
+            <span class="badge" id="badge-6">--</span>
+          </div>
+          <div class="card-meta">
+            <div>
+              <strong>Ecossistema Fluvial</strong>
+              <span id="meta-6">--</span>
+            </div>
+            <button class="btn-upgrade-hd" data-id="6">Ver 4G</button>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <!-- Barra de navegação inferior (modo App no celular) -->
+  <nav class="app-bottom-nav" id="appBottomNav" aria-label="Navegação principal">
+    <button class="bottom-nav-btn active" type="button" data-target="sec-monitor">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 14l4-4" />
+        <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+      </svg>
+      <span>Monitor</span>
+    </button>
+    <button class="bottom-nav-btn" type="button" data-target="sec-comparador">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="8" height="16" rx="1.5" />
+        <rect x="13" y="4" width="8" height="16" rx="1.5" />
+      </svg>
+      <span>Comparar</span>
+    </button>
+    <button class="bottom-nav-btn" type="button" data-target="sec-galeria">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      </svg>
+      <span>Galeria</span>
+    </button>
+  </nav>
+
+  <!-- Modal de instrução de instalação (iOS / instalação manual) -->
+  <div class="install-modal" id="installModal" hidden role="dialog" aria-modal="true" aria-labelledby="installModalTitle">
+    <div class="install-modal-card">
+      <div class="install-modal-head">
+        <strong id="installModalTitle">Instalar como Aplicativo</strong>
+        <button class="install-modal-close" id="btnCloseInstallModal" type="button" aria-label="Fechar">&times;</button>
+      </div>
+      <p id="installModalText">
+        Para instalar no celular, abra o menu do navegador e toque em <strong>Adicionar à Tela de Início</strong> (ou <strong>Instalar aplicativo</strong>).
+      </p>
+      <button class="btn-speedtest install-modal-ok" id="btnOkInstallModal" type="button">Entendi</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
