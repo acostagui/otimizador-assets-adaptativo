@@ -77,11 +77,13 @@ function setGaugeValue(mbps, tier, statusText) {
   const maxArc = 251.2;
   let ratio = 0;
   if (mbps <= 0.6) {
-    ratio = (mbps / 0.6) * 0.25;
+    ratio = (mbps / 0.6) * 0.22;
   } else if (mbps <= 2.5) {
-    ratio = 0.25 + ((mbps - 0.6) / 1.9) * 0.30;
+    ratio = 0.22 + ((mbps - 0.6) / 1.9) * 0.23;
   } else {
-    ratio = 0.55 + Math.min(0.45, ((mbps - 2.5) / 27.5) * 0.45);
+    // Escala logarítmica para 4G / fibra (2.5 Mbps até 500+ Mbps)
+    const logVal = Math.log10(mbps / 2.5) / Math.log10(500 / 2.5);
+    ratio = 0.45 + Math.min(0.55, Math.max(0, logVal) * 0.55);
   }
 
   const offset = maxArc - maxArc * Math.max(0.03, Math.min(1, ratio));
@@ -94,32 +96,51 @@ function setGaugeValue(mbps, tier, statusText) {
   });
 }
 
+let activeMeasureAbort = null;
+
 /**
- * Anima suavemente o ponteiro do Speed Test até o valor final medido
+ * Mede a latência real (Ping/RTT) após aquecer a conexão TLS/HTTP2
  */
-function animateGaugeSweep(targetMbps, finalTier, durationMs = 750) {
-  return new Promise((resolve) => {
-    const start = performance.now();
-    function step(now) {
-      const progress = Math.min(1, (now - start) / durationMs);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const currentVal = targetMbps * eased;
-      const tempTier = classifyMbpsToTier(currentVal, '4g');
-      setGaugeValue(currentVal, progress === 1 ? finalTier : tempTier, 'Medindo...');
-      if (progress < 1) {
-        requestAnimationFrame(step);
-      } else {
-        resolve();
-      }
-    }
-    requestAnimationFrame(step);
-  });
+async function measureRealPing(signal) {
+  const pingUrl = () => `https://speed.cloudflare.com/__down?bytes=0&t=${Date.now()}-${Math.random()}`;
+  // Warm-up para eliminar custo de DNS/TLS da medição de ping
+  await fetch(pingUrl(), { cache: 'no-store', signal });
+
+  let bestPing = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const t0 = performance.now();
+    await fetch(pingUrl(), { cache: 'no-store', signal });
+    const dt = performance.now() - t0;
+    if (dt < bestPing) bestPing = dt;
+  }
+  return Math.max(1, Math.round(bestPing));
 }
 
 /**
- * Executa o Speed Test real baixando um pacote de teste sem cache
+ * Baixa um fluxo em streaming acumulando bytes em tempo real
  */
-async function measureRealInternetSpeed() {
+async function streamDownload(bytes, signal, onChunk) {
+  const url = `https://speed.cloudflare.com/__down?bytes=${bytes}&t=${Date.now()}-${Math.random()}`;
+  const res = await fetch(url, { cache: 'no-store', signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  if (res.body && typeof res.body.getReader === 'function') {
+    const reader = res.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.byteLength) onChunk(value.byteLength);
+    }
+  } else {
+    const buf = await res.arrayBuffer();
+    onChunk(buf.byteLength);
+  }
+}
+
+/**
+ * Executa Speed Test real multi-stream (Cloudflare) com atualização ao vivo no velocímetro
+ */
+async function measureRealInternetSpeed(isCompact = false) {
   if (state.isMeasuring) return;
   state.isMeasuring = true;
 
@@ -127,54 +148,122 @@ async function measureRealInternetSpeed() {
   btn.disabled = true;
   btn.textContent = 'Medindo...';
 
-  const testUrl = `https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js?t=${Date.now()}`;
-  const startTime = performance.now();
+  const controller = new AbortController();
+  activeMeasureAbort = controller;
 
   let measuredMbps = connection?.downlink ?? 10;
   let measuredPing = connection?.rtt ?? 45;
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    setGaugeValue(state.liveMbps || 0, classifyMbpsToTier(state.liveMbps || 10, '4g'), 'Medindo ping...');
+    measuredPing = await measureRealPing(controller.signal);
+    state.livePingMs = measuredPing;
+    document.getElementById('valPing').textContent = `${measuredPing} ms`;
 
-    const response = await fetch(testUrl, {
-      cache: 'no-store',
-      signal: controller.signal
-    });
-    const headerTime = performance.now();
-    const buffer = await response.arrayBuffer();
-    const endTime = performance.now();
-    clearTimeout(timeout);
+    // 1) Sonda rápida (250 KB) para detectar se a rede é lenta (2G/3G) ou rápida (4G/Fibra)
+    let probeBytes = 0;
+    const probeStart = performance.now();
+    const probeCtrl = new AbortController();
+    const probeTimer = setTimeout(() => probeCtrl.abort(), 2200);
+    const onAbortAll = () => probeCtrl.abort();
+    controller.signal.addEventListener('abort', onAbortAll, { once: true });
 
-    measuredPing = Math.max(5, Math.round(headerTime - startTime));
-    const downloadSec = Math.max(0.02, (endTime - headerTime) / 1000);
+    try {
+      await streamDownload(250_000, probeCtrl.signal, (n) => {
+        probeBytes += n;
+        const sec = Math.max(0.05, (performance.now() - probeStart) / 1000);
+        const live = (probeBytes * 8) / (sec * 1_000_000);
+        setGaugeValue(live, classifyMbpsToTier(live, '4g'), 'Medindo...');
+      });
+    } catch (err) {
+      if (controller.signal.aborted) throw err;
+    } finally {
+      clearTimeout(probeTimer);
+      controller.signal.removeEventListener('abort', onAbortAll);
+    }
 
-    const perfEntries = performance.getEntriesByName(testUrl);
-    const lastEntry = perfEntries[perfEntries.length - 1];
-    const transferredBytes =
-      lastEntry && lastEntry.transferSize > 0
-        ? lastEntry.transferSize
-        : Math.round(buffer.byteLength * 0.28);
+    const probeSec = Math.max(0.01, (performance.now() - probeStart) / 1000);
+    const probeMbps = probeBytes > 0 ? (probeBytes * 8) / (probeSec * 1_000_000) : measuredMbps;
 
-    measuredMbps = Math.max(
-      0.1,
-      Number(((transferredBytes * 8) / (downloadSec * 1_000_000)).toFixed(1))
-    );
-  } catch (_) {
-    measuredMbps = connection?.downlink ?? 10;
-    measuredPing = connection?.rtt ?? 50;
+    if (probeMbps < 1.2 && probeSec >= 1.5) {
+      // Rede muito lenta (2G/3G real ou throttling): sonda já dá leitura precisa sem travar
+      measuredMbps = Number(Math.max(0.1, probeMbps).toFixed(2));
+    } else {
+      // 2) Teste sustentado com múltiplos fluxos paralelos (satura TCP como Speedtest real)
+      const streams = probeMbps > 15 ? 4 : 2;
+      const bytesPerStream = probeMbps > 30 ? 12_000_000 : probeMbps > 8 ? 4_000_000 : 1_500_000;
+      const maxDurationMs = isCompact ? 1500 : 2800;
+      const warmupMs = 300;
+
+      let totalBytes = 0;
+      let steadyBytes = 0;
+      let steadyStart = null;
+      const testStart = performance.now();
+
+      const testCtrl = new AbortController();
+      const testTimer = setTimeout(() => testCtrl.abort(), maxDurationMs);
+      const onParentAbort = () => testCtrl.abort();
+      controller.signal.addEventListener('abort', onParentAbort, { once: true });
+
+      let lastUiUpdate = 0;
+      const handleChunk = (n) => {
+        const now = performance.now();
+        totalBytes += n;
+        const elapsed = now - testStart;
+
+        if (elapsed >= warmupMs) {
+          if (steadyStart === null) steadyStart = now;
+          steadyBytes += n;
+        }
+
+        if (now - lastUiUpdate >= 90) {
+          lastUiUpdate = now;
+          const useSteady = steadyStart !== null && now - steadyStart >= 250;
+          const b = useSteady ? steadyBytes : totalBytes;
+          const s = Math.max(0.05, (useSteady ? now - steadyStart : elapsed) / 1000);
+          const curMbps = (b * 8) / (s * 1_000_000);
+          setGaugeValue(curMbps, classifyMbpsToTier(curMbps, '4g'), 'Medindo...');
+        }
+      };
+
+      const tasks = Array.from({ length: streams }, () =>
+        streamDownload(bytesPerStream, testCtrl.signal, handleChunk).catch(() => {})
+      );
+      await Promise.all(tasks);
+
+      clearTimeout(testTimer);
+      controller.signal.removeEventListener('abort', onParentAbort);
+      if (controller.signal.aborted) throw new Error('Aborted');
+
+      const endNow = performance.now();
+      const useSteady = steadyStart !== null && endNow - steadyStart >= 300 && steadyBytes > 0;
+      const finalBytes = useSteady ? steadyBytes : totalBytes;
+      const finalSec = Math.max(0.05, (useSteady ? endNow - steadyStart : endNow - testStart) / 1000);
+
+      if (finalBytes > 0) {
+        const rawMbps = (finalBytes * 8) / (finalSec * 1_000_000);
+        measuredMbps = Number(Math.max(0.1, rawMbps).toFixed(1));
+      } else {
+        measuredMbps = Number(Math.max(0.1, probeMbps).toFixed(1));
+      }
+    }
+
+    state.liveMbps = measuredMbps;
+    state.livePingMs = measuredPing;
+  } catch (err) {
+    if (!controller.signal.aborted) {
+      state.liveMbps = connection?.downlink ?? 10;
+      state.livePingMs = connection?.rtt ?? 50;
+    }
+  } finally {
+    if (activeMeasureAbort === controller) activeMeasureAbort = null;
+    state.isMeasuring = false;
+    btn.disabled = false;
+    btn.textContent = 'Medir Velocidade Real';
+    if (!controller.signal.aborted) {
+      applyNetworkToAll();
+    }
   }
-
-  state.liveMbps = measuredMbps;
-  state.livePingMs = measuredPing;
-
-  const net = getNetworkDecision();
-  await animateGaugeSweep(net.downlink, net.tier, 700);
-
-  state.isMeasuring = false;
-  btn.disabled = false;
-  btn.textContent = 'Medir Velocidade Real';
-  applyNetworkToAll();
 }
 
 function getNetworkDecision() {
@@ -351,7 +440,7 @@ function init() {
 
   setInterval(() => {
     if (state.mode === 'auto' && state.liveLoop && !document.hidden) {
-      measureRealInternetSpeed();
+      measureRealInternetSpeed(true);
     }
   }, 5000);
 
@@ -361,13 +450,13 @@ function init() {
       document.querySelector('#modeButtons .seg-btn[data-mode="auto"]').classList.add('active');
       state.mode = 'auto';
     }
-    measureRealInternetSpeed();
+    measureRealInternetSpeed(false);
   });
 
   document.getElementById('chkLiveLoop').addEventListener('change', (e) => {
     state.liveLoop = e.target.checked;
     if (state.liveLoop && state.mode === 'auto') {
-      measureRealInternetSpeed();
+      measureRealInternetSpeed(true);
     }
   });
 
@@ -377,8 +466,9 @@ function init() {
       btn.classList.add('active');
       state.mode = btn.getAttribute('data-mode');
       if (state.mode === 'auto') {
-        measureRealInternetSpeed();
+        measureRealInternetSpeed(false);
       } else {
+        if (activeMeasureAbort) activeMeasureAbort.abort();
         applyNetworkToAll();
       }
     });

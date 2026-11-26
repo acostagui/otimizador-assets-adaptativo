@@ -1,4 +1,4 @@
-const CACHE_NAME = 'otimizador-assets-v1';
+const CACHE_NAME = 'otimizador-assets-v2';
 
 const APP_SHELL = [
   './',
